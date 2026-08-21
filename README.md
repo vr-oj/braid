@@ -43,6 +43,12 @@ otherwise the recording opens in a new analysis tab without replacing work in
 progress. Launching BRAID normally without `--open` still creates another
 separate window.
 
+BRAID recognizes the optional BUTI v5.2 acquisition columns added by BURST to
+new synchronized force CSVs. Preload, deformation, rates, configured cycles,
+wire diameter, constant tension, and experiment type are displayed as
+read-only acquisition context. Legacy five-column CSVs continue to load, and
+these settings do not silently alter mechanics calculations.
+
 ## macOS installation
 
 Download the DMG that matches the Mac: `Silicon` for Apple silicon (M-series)

@@ -6,7 +6,11 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QFrame, QTabWidget, QMessage
 from data_pipeline import DataPipeline
 from processing.task_manager import TaskManager
 from widgets.file_picker import FilePickerWidget
-from processing.data_loader import get_system_username, parse_and_validate_csv
+from processing.data_loader import (
+    extract_buti_settings,
+    get_system_username,
+    parse_and_validate_csv,
+)
 from tabs.plot_tab import PlotTab
 from tabs.scale_tab import ScaleTab
 from tabs.roi_tab import ROITab
@@ -86,6 +90,12 @@ class AnalysisWidget(QWidget):
 
         main_layout.addLayout(top_layout)
 
+        self.buti_settings_label = QLabel()
+        self.buti_settings_label.setObjectName("butiSettingsLabel")
+        self.buti_settings_label.setWordWrap(True)
+        self.buti_settings_label.hide()
+        main_layout.addWidget(self.buti_settings_label)
+
         # A visual separator
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
@@ -148,12 +158,51 @@ class AnalysisWidget(QWidget):
         """Connects signals from widgets to the appropriate slots in this session."""
         self.file_pickers.video_selected.connect(self.on_file_selected)
         self.pipeline.plot_selection_changed.connect(self._save_plot_selection)
+        self.pipeline.data_available.connect(self._show_buti_settings)
         self.pipeline.cycle_selection_changed.connect(self._save_cycle_selection)
         self.pipeline.known_length_changed.connect(self._save_known_length)
         self.pipeline.scale_is_manual_changed.connect(self._save_scale_is_manual)
         self.pipeline.manual_conversion_factor_changed.connect(self._save_manual_conversion_factor)
         self.pipeline.state_loaded.connect(self._restore_loaded_session_header)
         #self.pipeline.scale_changed.connect(self._save_scale)
+
+    @Slot(dict)
+    def _show_buti_settings(self, data: dict) -> None:
+        """Show acquisition context without changing analysis calculations."""
+
+        settings = extract_buti_settings(data)
+        if not settings:
+            self.buti_settings_label.clear()
+            self.buti_settings_label.hide()
+            return
+
+        parts = []
+        experiment_type = settings.get("experiment_type")
+        if experiment_type:
+            parts.append(str(experiment_type))
+
+        def add_value(label, key, unit="", precision=3):
+            value = settings.get(key)
+            if value is None or value == "":
+                return
+            try:
+                rendered = f"{float(value):.{precision}f}"
+            except (TypeError, ValueError):
+                rendered = str(value)
+            parts.append(f"{label}: {rendered}{unit}")
+
+        add_value("Preload", "preload_mm", " mm")
+        add_value("Deformation", "deformation_mm", " mm")
+        add_value("Deformation", "deformation_percent", "%", precision=1)
+        add_value("Steps", "steps", precision=0)
+        add_value("Forward rate", "rate_forward_mm_s", " mm/s")
+        add_value("Reverse rate", "rate_reverse_mm_s", " mm/s")
+        add_value("Cycles", "cycles", precision=0)
+        add_value("Wire diameter", "wire_diameter_mm", " mm")
+        add_value("Constant tension", "constant_tension_mn", " mN", precision=1)
+
+        self.buti_settings_label.setText("BUTI setup — " + "  |  ".join(parts))
+        self.buti_settings_label.show()
 
     @Slot()
     def _restore_loaded_session_header(self):

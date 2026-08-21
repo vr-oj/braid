@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Acquisition metadata
+
+- Read the optional BUTI v5.2 settings columns written by BURST while retaining
+  compatibility with legacy five-column force CSVs.
+- Normalize the same embedded TIFF settings and show the acquisition setup in
+  the analysis header without changing any mechanics calculations.
+
 ## 1.0.0 - External recording handoff
 
 ### Added

@@ -20,6 +20,19 @@ log = logging.getLogger(__name__)
 
 KERNEL = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
 
+BUTI_CSV_SETTINGS = {
+    "experiment_type": ("experiment_type", str),
+    "preload_mm": ("preload_mm", float),
+    "deformation_mm": ("deformation_mm", float),
+    "deformation_percent": ("deformation_percent", float),
+    "steps": ("steps", lambda value: int(float(value))),
+    "rate_forward_mm_s": ("rate_forward_mm_s", float),
+    "rate_reverse_mm_s": ("rate_reverse_mm_s", float),
+    "cycles_configured": ("cycles", lambda value: int(float(value))),
+    "wire_diameter_mm": ("wire_diameter_mm", float),
+    "constant_tension_mn": ("constant_tension_mn", float),
+}
+
 
 def get_system_username():
     """Returns the current system user name in a cross-platform way."""
@@ -196,7 +209,7 @@ def frame_loader(signals, file_path, frame_indices, count=False):
 
 
 def parse_and_validate_csv(csv_path: Path) -> dict | None:
-    """Reads the CSV, validates columns, and returns a dictionary of lists."""
+    """Read required telemetry and optional BURST/BUTI acquisition settings."""
     required_cols = {"time_s", "frame_index", "distance", "cycle", "force"}
 
     try:
@@ -208,8 +221,11 @@ def parse_and_validate_csv(csv_path: Path) -> dict | None:
                 log.warning(f"CSV missing columns. Expected {required_cols}, found {headers}")
                 return None
 
-            # Initialize the dictionary with empty lists
+            # Keep the established numeric telemetry shape. Acquisition
+            # settings are normalized separately so analysis code cannot
+            # accidentally treat them as per-sample numeric signals.
             data = {col: [] for col in required_cols}
+            buti_settings = {}
 
             # Populate the dictionary
             for row in reader:
@@ -217,11 +233,48 @@ def parse_and_validate_csv(csv_path: Path) -> dict | None:
                     # Convert to float (or int for frame_index if preferred)
                     data[col].append(float(row[col]))
 
+                for csv_column, (settings_key, converter) in BUTI_CSV_SETTINGS.items():
+                    value = (row.get(csv_column) or "").strip()
+                    if not value or settings_key in buti_settings:
+                        continue
+                    try:
+                        buti_settings[settings_key] = converter(value)
+                    except (TypeError, ValueError):
+                        log.warning(
+                            "Ignoring invalid BUTI setting %s=%r in %s",
+                            csv_column,
+                            value,
+                            csv_path,
+                        )
+
+            if buti_settings:
+                data["buti_settings"] = buti_settings
+
             return data
 
     except Exception as e:
         log.error(f"Failed to parse CSV {csv_path}: {e}")
         return None
+
+
+def extract_buti_settings(data: dict | None) -> dict:
+    """Normalize settings loaded from a BURST CSV or embedded TIFF metadata."""
+
+    if not isinstance(data, dict):
+        return {}
+
+    raw_settings = data.get("buti_settings")
+    if isinstance(raw_settings, dict):
+        return dict(raw_settings)
+
+    # TIFF metadata is collected once per page, so a settings snapshot arrives
+    # as a repeated list. All pages in one run carry the same snapshot.
+    if isinstance(raw_settings, list):
+        for item in raw_settings:
+            if isinstance(item, dict) and item:
+                return dict(item)
+
+    return {}
 
 
 def _interpolate_rois_worker(roi_data: dict, pct: float) -> list[dict]:

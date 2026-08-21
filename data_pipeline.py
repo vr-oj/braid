@@ -9,6 +9,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal, Slot, QTimer, SignalInstance
 #from processing.data_transform import zero_data, smooth_data, label_image, create_visual_from_labels, convert_numpy, restore_numpy, n_closest_numbers
 from processing.data_loader import (
+    extract_buti_settings,
     frame_loader,
     geometry_worker,
     keep_largest_component,
@@ -129,6 +130,7 @@ class DataPipeline(QObject):
         self.left_image: np.ndarray | None = None
 
         self.data = None
+        self.buti_settings = {}
         self.frame_data = {}
         self.roi_data = {
             'min': [],
@@ -276,6 +278,10 @@ class DataPipeline(QObject):
         if not hasattr(self, "data") or not self.data:
             log.error("No telemetry data available! Pipeline cannot proceed.")
             return
+
+        self.buti_settings = extract_buti_settings(self.data)
+        if self.buti_settings:
+            log.info("Loaded BUTI acquisition settings: %s", self.buti_settings)
 
         # From here down, self.data is guaranteed to exist and have the right columns
         log.info(f"Data keys available: {self.data.keys()}")
@@ -2168,6 +2174,7 @@ class DataPipeline(QObject):
             self.roi_max_image_loaded.emit(max_frame)
 
         if isinstance(self.data, dict) and self.data:
+            self.buti_settings = extract_buti_settings(self.data)
             self.data_available.emit(self.data)
         if self.data_trimmed is not None and self.data_trimmed.size > 0:
             self.trim_time_changed.emit(self.trim_time)
